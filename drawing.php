@@ -1,82 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <title>Mamatay na</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TriSakay | Commuter</title>
+    <?php
+    include '../dependencies/dependencies.php';
+    ?>
+    <link rel="stylesheet" href="../css/booking.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <style>
-        .search {
-            top: 10px;
-            display: flex;
-            align-items: center;
-            background-color: #fff;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        #search-input {
-            flex-grow: 1;
-            padding: 8px;
-            border: none;
-            font-size: 16px;
-        }
-
-        #search-button {
-            padding: 8px 16px;
-            border: none;
-            background-color: #3b8875;
-            color: #fff;
-            font-size: 16px;
-            cursor: pointer;
-        }
-    </style>
 </head>
 
 <body>
-    <div class="search">
-        <input id="search-input" type="text" placeholder="Where are you heading to?">
-        <button id="search-button"><i class="fa-solid fa-magnifying-glass-location fa-lg" style="color: #ffffff;"></i>
-            Search</button>
-    </div>
-    <div id="map" style="width: 600px; height: 400px;"></div>
+    <div id="map" style="width: 100%; height: 50vh;"></div>
     <div id="coordinates"></div>
+    <button type="submit" class="btn btn-default custom-btn" >
+             Save Border
+        </button>
+        <button type="submit" class="btn btn-default custom-btn" onclick="redirectToDrawing()">
+             Save Marker
+        </button>
+        <script src="../js/button.js"></script>
+    <?php
+    include '../db/dbconn.php';
 
-    <div class="input-field">
-            <input type="text" class="input" id="email" name="email" required autocomplete="off" />
-            <label for="Toda"><i class="fa-solid fa-envelope fa-lg" style="color: #ffffff;"></i> Toda</label>
-          </div>
-          <h1 hidden>Creator = Session named AdminID Select from admin where Firstname</h1>
-          <!-- Admin Session ID get Admin Info -->
-          <h1 hidden>Date & Time NOW()</h1>
-          <!-- MYSQL statement NOW -->
-          <h1 hidden>IpAdress</h1>
-          <!-- PHP Command get IP -->
-          <div class="container d-flex justify-content-center mt-3">
-            <button type="submit" class="btn btn-default custom-btn">Save Border</button>
-          </div>
-          <div class="input-field">
-            <input type="text" class="input" id="email" name="email" required autocomplete="off" />
-            <label for="Toda"><i class="fa-solid fa-envelope fa-lg" style="color: #ffffff;"></i> Toda</label>
-          </div>
-          <div class="container d-flex justify-content-center mt-3">
-            <button type="submit" class="btn btn-default custom-btn">Save Marker</button>
-          </div>
+    $query = "SELECT toda, borders FROM route WHERE status = 'active'";
+    $result = mysqli_query($conn, $query);
+    $rows = array();
 
+    while ($r = mysqli_fetch_assoc($result)) {
+        $rows[] = array(
+            'toda' => $r['toda'],
+            'borders' => json_decode($r['borders'], true)
+        );
+    }
 
-
+    $jsonData = json_encode($rows);
+    ?>
     <script>
-        var map = L.map('map').setView([51.505, -0.09], 13);
+        var map = L.map('map', {
+            zoomControl: false,
+            doubleClickZoom: false
+        }).setView([14.954283534502583, 120.90080909502916], 15);
         var coordinatesArray = [];
 
+        let dropoffPoint;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
+
+        var redMarkerIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34]
+        });
+
 
         // Initialize the draw control and add it to the map
         var drawControl = new L.Control.Draw({
@@ -143,28 +127,63 @@
             });
         });
 
-        const searchInput = document.getElementById("search-input");
-        const searchButton = document.getElementById("search-button");
+        const dbPolygons = <?php echo $jsonData; ?>;
+            let polygonsLayer = L.layerGroup().addTo(map);
 
-        searchInput.addEventListener("keyup", function (event) {
-            if (event.keyCode === 13) {
-                searchButton.click();
+        function displayPolygons() {
+            dbPolygons.forEach((polygonData, index) => {
+                const latlngs = polygonData.borders.latlngs[0].map(coord => [coord.lat, coord.lng]);
+                const polygon = L.polygon(latlngs, {
+                    color: 'transparent',
+                    fillColor: 'green',
+                    fillOpacity: 0.3,
+                    weight: 0
+                }).addTo(polygonsLayer);
+                polygon.toda = polygonData.toda;
+            });
+        }
+
+        function isPointInPolygon(point, polygon) {
+            let polyPoints = polygon.getLatLngs()[0];
+            let x = point.lat, y = point.lng;
+
+            let inside = false;
+            for (let i = 0, j = polyPoints.length - 1; i < polyPoints.length; j = i++) {
+                let xi = polyPoints[i].lat, yi = polyPoints[i].lng;
+                let xj = polyPoints[j].lat, yj = polyPoints[j].lng;
+
+                let intersect = ((yi > y) !== (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
             }
-        });
+            return inside;
+        }
+         function addDropoffPoint(e) {
+            let isInPolygon = false;
+            polygonsLayer.eachLayer(function (layer) {
+                if (isPointInPolygon(e.latlng, layer)) {
+                    isInPolygon = true;
+                    return false;
+                }
+            });
 
-        searchButton.addEventListener("click", function () {
-            var searchValue = searchInput.value;
-            axios.get("https://nominatim.openstreetmap.org/search?q=" + searchValue + "&format=json&limit=1")
-                .then(function (response) {
-                    var result = response.data[0];
-                    map.setView([result.lat, result.lon], 16);
-                })
-                .catch(function (error) {
-                    console.log(error);
-                });
-        });
+            if (isInPolygon) {
+                // If a drop-off marker already exists, remove it before adding a new one
+                if (dropoffPoint) {
+                    map.removeLayer(dropoffPoint);
+                }
+                // Adding a drop-off marker using the red icon
+                dropoffPoint = L.marker(e.latlng, { icon: redMarkerIcon }).addTo(map);
+                dropoffPoint.bindPopup("Toda:").openPopup();
+                
+            } else {
+                alert("You can only create marker inside the Route Borders.");
+            }
+        }
+
+        displayPolygons();
+        map.on('dblclick', addDropoffPoint);
     </script>
-
 </body>
 
 </html>
