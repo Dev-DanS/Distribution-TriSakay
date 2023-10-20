@@ -103,6 +103,7 @@
 
         //Simplify Baliuag Border w Turf.js 
         //Fetching for slow pc
+        //Tolerance = 0.001;
         const boundaryData = <?php echo $boundaryData; ?>;
 
         const boundaryCoordinates = boundaryData.latlngs[0].map(coord => [coord.lat, coord.lng]);
