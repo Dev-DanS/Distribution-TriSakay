@@ -87,7 +87,7 @@
 
             const boundaryPolyline = L.polyline(boundaryCoordinates, {
                 color: 'red',
-                dashArray: '5, 10', 
+                dashArray: '2, 10', 
                 weight: 3, 
             }).addTo(map);
 
