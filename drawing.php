@@ -53,19 +53,13 @@
 
     <?php
     include '../db/dbconn.php';
-
-    // Query the database to get the active boundary data
     $query = "SELECT border FROM baliuag WHERE status = 'active'";
     $result = mysqli_query($conn, $query);
 
-    // Check if any rows were returned
     if (mysqli_num_rows($result) > 0) {
-        // Fetch the boundary data from the first row
         $boundaryData = mysqli_fetch_assoc($result)['border'];
-
-        // You can now use $boundaryData in your JavaScript code
     } else {
-        // Handle the case where no active boundary data was found
+        
         echo "No active boundary data found in the database.";
     }
     ?>
@@ -97,7 +91,6 @@
             },
         });
 
-        // // Define the boundary polygon as red polygon with transparent fill
         // const boundaryPolygon = L.polygon([
         //     [14.975631667703944, 120.8485794067383],
         //     [14.953409156404991, 120.87347030639648],
@@ -105,30 +98,19 @@
         //     [14.986742059051503, 120.87827682495119]
         // ], {
         //     color: 'red',
-        //     fillOpacity: 0, // Set fill opacity to 0 to make it transparent
+        //     fillOpacity: 0, 
         // }).addTo(map);
 
-        // Parse the JSON string to get the boundary coordinates
-        // Replace this hard-coded boundaryData with the fetched data
+        //Simplify Baliuag Border w Turf.js 
+        //Fetching for slow pc
         const boundaryData = <?php echo $boundaryData; ?>;
 
-
-        // Extract the coordinates from the parsed data
         const boundaryCoordinates = boundaryData.latlngs[0].map(coord => [coord.lat, coord.lng]);
-
-        // Define the boundary polygon as red polygon with transparent fill
         const boundaryPolygon = L.polygon(boundaryCoordinates, {
             color: 'red',
-            fillOpacity: 0, // Set fill opacity to 0 to make it transparent
+            fillOpacity: 0, 
         }).addTo(map);
         
-
-        
-
-
-
-
-
         function isShapeInsideExistingShape(newLayer) {
             let overlaps = false;
             polygonsLayer.eachLayer(function (layer) {
