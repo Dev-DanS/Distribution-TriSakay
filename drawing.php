@@ -26,9 +26,10 @@
 <body>
     <div id="map" style="width: 100%; height: 50vh;"></div>
     <div id="coordinates"></div>
-    <button type="submit" class="btn btn-default custom-btn">
+    <button type="submit" class="btn btn-default custom-btn" id="saveBorderButton">
         Save Border
     </button>
+
     <button type="submit" class="btn btn-default custom-btn" onclick="redirectToDrawing()">
         Save Marker
     </button>
@@ -67,11 +68,11 @@
             var drawControl = new L.Control.Draw({
                 draw: {
                     marker: true,
-                    circle: false,     
+                    circle: false,
                     rectangle: false,
                     polygon: true,
-                    polyline: false,   
-                    circlemarker: false 
+                    polyline: false,
+                    circlemarker: false
                 },
                 edit: {
                     featureGroup: new L.FeatureGroup(),
@@ -84,7 +85,7 @@
             function isShapeInsideExistingShape(newLayer) {
                 let overlaps = false;
                 polygonsLayer.eachLayer(function (layer) {
-                    if (overlaps) return; 
+                    if (overlaps) return;
                     if (newLayer instanceof L.Polygon && layer instanceof L.Polygon) {
                         const newLatLngs = newLayer.getLatLngs()[0];
                         for (let i = 0; i < newLatLngs.length; i++) {
@@ -106,7 +107,7 @@
                     const existingPolygonGeoJSON = existingPolygon.toGeoJSON();
                     if (turf.intersect(newPolygonGeoJSON, existingPolygonGeoJSON)) {
                         overlaps = true;
-                        return;  
+                        return;
                     }
                 });
                 return overlaps;
@@ -121,7 +122,7 @@
                 if (layer instanceof L.Polygon) {
                     if (doesPolygonOverlap(layer)) {
                         alert("A route border cannot be created on top of an existing route border");
-                        return;  
+                        return;
                     }
                 }
 
@@ -135,31 +136,33 @@
                     });
                     if (!isInPolygon) {
                         alert("You can only place a marker inside the Route Borders.");
-                        return;  
+                        return;
                     }
                 } else if (layer instanceof L.Polygon) {
-                    
+
                 }
+                coordinatesArray = [];
                 map.addLayer(layer);
+                updateCoordinates(); // Update the display
 
                 if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
-               
+
                     var latlng = layer.getLatLng();
                     var coordinates = { type: "marker", latlng: latlng };
                     coordinatesArray.push(coordinates);
                 } else if (layer instanceof L.Circle) {
-                    
+
                     var latlng = layer.getLatLng();
                     var radius = layer.getRadius();
                     var coordinates = { type: "circle", latlng: latlng, radius: radius };
                     coordinatesArray.push(coordinates);
                 } else if (layer instanceof L.Rectangle) {
-                    
+
                     var bounds = layer.getBounds();
                     var coordinates = { type: "rectangle", bounds: bounds };
                     coordinatesArray.push(coordinates);
                 } else if (layer instanceof L.Polygon) {
-                   
+
                     var latlngs = layer.getLatLngs();
                     var coordinates = { type: "polygon", latlngs: latlngs };
                     coordinatesArray.push(coordinates);
@@ -171,11 +174,13 @@
             function updateCoordinates() {
                 var coordinatesDiv = document.getElementById('coordinates');
                 coordinatesDiv.innerHTML = '<h2>Coordinates:</h2>';
-                coordinatesArray.forEach(function (coordinates, index) {
-                    var coordinatesInfo = JSON.stringify(coordinates);
+                if (coordinatesArray.length > 0) {
+                    var latestCoordinates = coordinatesArray[coordinatesArray.length - 1];
+                    var coordinatesInfo = JSON.stringify(latestCoordinates);
                     coordinatesDiv.innerHTML += '<p>' + coordinatesInfo + '</p>';
-                });
+                }
             }
+
 
             map.on('editable:editing', function (event) {
                 var layers = event.layers;
@@ -214,6 +219,39 @@
                 }
                 return inside;
             }
+
+            document.getElementById('saveBorderButton').addEventListener('click', function () {
+                saveCoordinatesToDatabase();
+            });
+
+            function saveCoordinatesToDatabase() {
+                const coordinatesDiv = document.getElementById('coordinates');
+                const coordinates = coordinatesDiv.querySelector('p').textContent;
+
+                const coordinatesData = { coordinates: coordinates };
+
+                fetch('save_coordinates.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(coordinatesData),
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Coordinates saved successfully!');
+                        } else {
+                            alert('Error saving coordinates.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error saving coordinates:', error);
+                    });
+            }
+
+
+
 
             displayPolygons();
 
