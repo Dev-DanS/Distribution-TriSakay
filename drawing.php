@@ -15,6 +15,8 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
 
     <style>
         body {
@@ -26,29 +28,45 @@
 <body>
     <div id="map" style="width: 100%; height: 50vh;"></div>
     <div id="coordinates"></div>
-    <button type="submit" class="btn btn-default custom-btn" id="saveBorderButton" onclick="redirectToShape()">
+    <div class="input-field">
+    <label for="text_input"> Toda</label>
+    <input type="text" class="input" id="text_input" name="text_input" required autocomplete="off" />
+</div>
+
+    <button type="submit" class="btn btn-default custom-btn" id="saveBorderButton" >
         Save Border
     </button>
 
-    <button type="submit" class="btn btn-default custom-btn" onclick="redirectToDrawing()">
+    <button type="submit" class="btn btn-default custom-btn" >
         Save Marker
     </button>
     <script src="../js/button.js"></script>
-    <?php
-    include '../db/dbconn.php';
+    <?php include '../db/dbconn.php';
 
-    $query = "SELECT toda, borders FROM route WHERE status = 'active'";
-    $result = mysqli_query($conn, $query);
-    $rows = array();
+    $routeQuery = "SELECT toda, borders FROM route WHERE status = 'active'";
+    $routeResult = mysqli_query($conn, $routeQuery);
+    $todaQuery = "SELECT toda, terminal FROM todalocation";
+    $todaResult = mysqli_query($conn, $todaQuery);
 
-    while ($r = mysqli_fetch_assoc($result)) {
-        $rows[] = array(
-            'toda' => $r['toda'],
-            'borders' => json_decode($r['borders'], true)
-        );
+    $routeData = [];
+    $todaLocations = [];
+
+    while ($row = mysqli_fetch_assoc($routeResult)) {
+        $routeData[] = [
+            'toda' => $row['toda'],
+            'borders' => json_decode($row['borders'], true)
+        ];
     }
 
-    $jsonData = json_encode($rows);
+    while ($tl = mysqli_fetch_assoc($todaResult)) {
+        $todaLocations[] = [
+            'toda' => $tl['toda'],
+            'terminal' => json_decode($tl['terminal'], true)
+        ];
+    }
+
+    $jsonData = json_encode($routeData);
+    $todalocationData = json_encode($todaLocations);
     ?>
 
     <?php
@@ -59,7 +77,6 @@
     if (mysqli_num_rows($result) > 0) {
         $boundaryData = mysqli_fetch_assoc($result)['border'];
     } else {
-        
         echo "No active boundary data found in the database.";
     }
     ?>
@@ -91,27 +108,13 @@
             },
         });
 
-        // const boundaryPolygon = L.polygon([
-        //     [14.975631667703944, 120.8485794067383],
-        //     [14.953409156404991, 120.87347030639648],
-        //     [14.967008280154081, 120.89887619018556],
-        //     [14.986742059051503, 120.87827682495119]
-        // ], {
-        //     color: 'red',
-        //     fillOpacity: 0, 
-        // }).addTo(map);
-
-        //Simplify Baliuag Border w Turf.js 
-        //Fetching for slow pc
-        //Tolerance = 0.001;
         const boundaryData = <?php echo $boundaryData; ?>;
-
+        
         const boundaryCoordinates = boundaryData.latlngs[0].map(coord => [coord.lat, coord.lng]);
         const boundaryPolygon = L.polygon(boundaryCoordinates, {
             color: 'red',
             fillOpacity: 0, 
         }).addTo(map);
-        
         function isShapeInsideExistingShape(newLayer) {
             let overlaps = false;
             polygonsLayer.eachLayer(function (layer) {
@@ -150,14 +153,14 @@
             var layer = event.layer;
 
             if (layer instanceof L.Polygon) {
-                if (!isPolygonWithinBoundary(layer, boundaryPolygon)) {
-                    alert("Polygon must be inside the specified boundary.");
+                if (doesPolygonOverlap(layer)) {
+                    alert("A route border cannot be created on top of an existing route border");
                     map.removeLayer(layer);
                     return;
                 }
 
-                if (doesPolygonOverlap(layer)) {
-                    alert("A route border cannot be created on top of an existing route border");
+                if (!isPolygonWithinBoundary(layer, boundaryPolygon)) {
+                    alert("Polygon must be inside the specified boundary.");
                     map.removeLayer(layer);
                     return;
                 }
@@ -180,7 +183,7 @@
             }
             coordinatesArray = [];
             map.addLayer(layer);
-            updateCoordinates(); // Update the display
+            updateCoordinates();
 
             if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
 
@@ -226,20 +229,29 @@
         });
 
         const dbPolygons = <?php echo $jsonData; ?>;
-        let polygonsLayer = L.layerGroup().addTo(map);
+            const todalocations = <?php echo $todalocationData; ?>;
+            const polygonsLayer = L.layerGroup().addTo(map);
+            const markersLayer = L.layerGroup().addTo(map);
 
-        function displayPolygons() {
-            dbPolygons.forEach((polygonData, index) => {
-                const latlngs = polygonData.borders.latlngs[0].map(coord => [coord.lat, coord.lng]);
-                const polygon = L.polygon(latlngs, {
-                    color: 'transparent',
-                    fillColor: 'green',
-                    fillOpacity: 0.3,
-                    weight: 0
-                }).addTo(polygonsLayer);
-                polygon.toda = polygonData.toda;
-            });
-        }
+            function displayPolygons() {
+                dbPolygons.forEach((polygonData) => {
+                    const latlngs = polygonData.borders.latlngs[0].map(coord => [coord.lat, coord.lng]);
+                    const polygon = L.polygon(latlngs, {
+                        color: 'transparent',
+                        fillColor: 'green',
+                        fillOpacity: 0.3,
+                        weight: 0
+                    }).addTo(polygonsLayer);
+                    polygon.toda = polygonData.toda;
+
+                    const matchingToda = todalocations.find(tl => tl.toda === polygonData.toda);
+
+                    if (matchingToda) {
+                        const marker = L.marker([matchingToda.terminal.latlng.lat, matchingToda.terminal.latlng.lng]).addTo(markersLayer);
+                        marker.bindPopup(`${polygonData.toda} Terminal`)
+                    }
+                });
+            }
 
         function isPointInPolygon(point, polygon) {
             let polyPoints = polygon.getLatLngs()[0];
@@ -258,14 +270,19 @@
         }
 
         document.getElementById('saveBorderButton').addEventListener('click', function () {
-            saveCoordinatesToDatabase();
+            const todaInput = document.getElementById('text_input').value;
+            if (todaInput.trim() === '') {
+                alert('Please enter a Toda before saving.');
+                return;
+            }
+
+            saveCoordinatesToDatabase(todaInput);
         });
 
-        function saveCoordinatesToDatabase() {
+        function saveCoordinatesToDatabase(toda) {
             const coordinatesDiv = document.getElementById('coordinates');
-            const coordinates = coordinatesDiv.querySelector('p').textContent;
-
-            const coordinatesData = { coordinates: coordinates };
+            const coordinates = coordinatesDiv.querySelector('p').textContent;r
+            const coordinatesData = { toda: toda, coordinates: coordinates };
 
             fetch('save_coordinates.php', {
                 method: 'POST',
@@ -288,7 +305,6 @@
         }
 
         function isPolygonWithinBoundary(polygon, boundary) {
-            // Check if any point of the polygon is outside the boundary
             const polygonLatLngs = polygon.getLatLngs()[0];
             for (const point of polygonLatLngs) {
                 if (!boundary.getBounds().contains(point)) {
@@ -297,6 +313,8 @@
             }
             return true;
         }
+
+
 
 
         displayPolygons();
